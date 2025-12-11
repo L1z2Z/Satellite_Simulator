@@ -1,9 +1,48 @@
-body {
-  margin: 0;
-}
+/* 保留模板原本的基础样式 */
+body { margin: 0; }
 
 #cesiumContainer {
-  background: gray;
+  background: #1a1a1a;
   height: 100vh;
   width: 100%;
+}
+
+/* === 新增：覆盖层 UI === */
+#toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(0,0,0,.45);
+  color: #fff;
+  border-radius: 12px;
+  font-family: system-ui, sans-serif;
+  align-items: center;
+  z-index: 10;
+}
+#toolbar button {
+  border: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.15);
+  color: #fff;
+  cursor: pointer;
+}
+#toolbar button:hover { background: rgba(255,255,255,.25); }
+
+#infoPanel {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  width: 260px;
+  padding: 10px 12px;
+  background: rgba(0,0,0,.45);
+  color: #fff;
+  border-radius: 12px;
+  font: 12px/1.4 system-ui, sans-serif;
+  z-index: 10;
+  white-space: pre-wrap;
 }
