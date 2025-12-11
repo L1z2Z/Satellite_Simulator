@@ -7,12 +7,22 @@
   </head>
   <body>
     <div id="cesiumContainer"></div>
+    <!-- 传感器画面（PiP） -->
+    <div id="sensorView" class="sv hidden">
+      <div class="sv-toolbar">
+        <select id="sensorSatSelect"></select>
+        <div class="spacer"></div>
+        <button id="sensorSnap">拍照</button>
+        <button id="sensorToggle">隐藏</button>
+      </div>
+      <div id="sensorCanvas" class="sv-canvas"></div>
+    </div>
 
     <!-- 叠加在画面上的简易工具条（时间轴控制） -->
     <div id="toolbar">
       <button id="btnPrev">上一帧</button>
       <button id="btnPlayBackward">倒播</button>
-      <span id="frameInfo">Frame 0 / 999</span>
+      <span id="frameInfo">Frame 0 / 149</span>
       <button id="btnPlayForward">播放</button>
       <button id="btnNext">下一帧</button>
     </div>

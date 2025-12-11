@@ -3,11 +3,15 @@ import "cesium/Build/Cesium/Widgets/widgets.css";
 import "./style.css";
 
 import { Viewer, Terrain, Ion, Cesium3DTileset } from "cesium";
+import CanvasRecorder, { chooseSupportedMimeType } from "./services/videoRecorder";
+import { NUM_FRAMES } from "./services/simResultAdapter";
 import { getNextFrame, rollbackTo, configureBackend, getCurrentFrameIndex } from "./services/frameService";
 import TargetsLayer from "./view3d/TargetsLayer";
 import SatellitesLayer from "./view3d/SatellitesLayer";
 import FovCones from "./view3d/FovCones";
 import VisibilityLinks from "./view3d/VisibilityLinks";
+import SensorView from "./ui/SensorView";
+import FovFootprint from "./view3d/FovFootprint";
 import LinkController from "./inteactions/linkController";
 import { getLinksForFrame, toggleLink, undoLast, linkKey, serializeAll, loadFromObject } from "./state/annotationStore";
 import { downloadJSON, readJSONFile } from "./services/annotateService";
@@ -42,10 +46,20 @@ const targetsLayer = new TargetsLayer(viewer);
 const satsLayer = new SatellitesLayer(viewer); // 可传 { modelUri } 自定义模型
 const fovCones = new FovCones(viewer, { coneLength: 400_000 });
 const linksLayer = new VisibilityLinks(viewer);
+const fovFootprint = new FovFootprint(viewer);
+
+// 传感器小窗（第二个 Viewer）
+const sensorContainer = document.getElementById("sensorCanvas");
+const sensorView = new SensorView(sensorContainer, { show: true }); // 默认显示
+
 
 // ========== 3) UI & 播放控制 ==========
 const frameInfoEl = document.getElementById("frameInfo");
 const infoPanelEl = document.getElementById("infoPanel");
+const sensorRootEl = document.getElementById("sensorView");
+const selSensorSat = document.getElementById("sensorSatSelect");
+const btnSensorSnap = document.getElementById("sensorSnap");
+const btnSensorToggle = document.getElementById("sensorToggle");
 const infoPanel = new InfoPanel(infoPanelEl, {
   onExport: () => {
     const obj = serializeAll();
@@ -68,6 +82,36 @@ const infoPanel = new InfoPanel(infoPanelEl, {
 
 let playing = false;
 let playDir = +1; // +1 正播；-1 倒播
+let sensorSatId = null;
+
+// ==== 录制：主画布视频 ====
+let recorder = null;
+const AUTO_RECORD_ON_FORWARD_PLAY = true;
+
+function ensureRecorder() {
+  if (typeof MediaRecorder === "undefined") {
+    console.warn("当前浏览器不支持 MediaRecorder，无法录制视频。");
+    return null;
+  }
+  if (recorder) return recorder;
+  const mime = chooseSupportedMimeType();
+  try {
+    recorder = new CanvasRecorder(viewer.scene.canvas, { mimeType: mime, fps: 30 });
+  } catch (e) {
+    console.warn("创建录制器失败：", e);
+    recorder = null;
+  }
+  return recorder;
+}
+
+async function finalizeRecordingAndDownload() {
+  if (recorder && recorder.isRecording()) {
+    const ts = new Date();
+    const pad = (n)=>String(n).padStart(2,"0");
+    const fname = `sim-play-${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}.webm`;
+    await recorder.download(fname);
+  }
+}
 
 configureBackend({ mock: true }); // 现在走 Mock；接后端时改为 { mock: false, baseUrl: "http://your.api" }
 
@@ -103,8 +147,27 @@ async function renderFrame(frameIndex) {
   const filtered = linksWithAnno.filter(applyFilters);
   linksLayer.render(filtered);
 
+  // —— FOV 足迹（主视图）& 传感器小窗（PiP） ——
+  // 1) 选择当前观测的卫星（默认第一颗；下拉变化后以用户选择为准）
+  if (!sensorSatId) sensorSatId = (data.satellites[0] && data.satellites[0].id) || null;
+  // 2) 刷新下拉列表（仅当选项变化时）
+  if (selSensorSat) {
+    const ids = data.satellites.map(s => s.id);
+    if (selSensorSat.dataset._sig !== ids.join(",")) {
+      selSensorSat.innerHTML = ids.map(id => `<option value="${id}" ${id===sensorSatId?"selected":""}>${id}</option>`).join("");
+      selSensorSat.dataset._sig = ids.join(",");
+    }
+  }
+  const sat = data.satellites.find(s => s.id === sensorSatId) || data.satellites[0];
+  if (sat) {
+    // 主视图地面足迹
+    fovFootprint.update(sat.position, data.fovHalfAngleDeg);
+    // 小窗相机视角（相机位于卫星，看向地心；垂直FOV=2*halfAngle）
+    sensorView.setCameraAtSatellite(sat.position, data.fovHalfAngleDeg);
+  }
+
   // 2) 面板
-  frameInfoEl.textContent = `Frame ${data.frame} / 999`;
+  frameInfoEl.textContent = `Frame ${data.frame} / ${NUM_FRAMES - 1}`;
   const visibleCount = data.links.reduce((s, l) => s + (l.visible ? 1 : 0), 0);
   const annotatedCount = linksWithAnno.reduce((s, l) => s + (l.annotated ? 1 : 0), 0);
   // 把面板切换为交互版
@@ -127,8 +190,15 @@ async function renderFrame(frameIndex) {
 
 async function step(dir = +1) {
   if (dir > 0) {
+    const cur = getCurrentFrameIndex();
+    // 若已在最后一帧，则自动停止并保存视频，不再回绕到 0
+    if (cur >= NUM_FRAMES - 1) {
+      playing = false;
+      await finalizeRecordingAndDownload();
+      return;
+    }
     const data = await getNextFrame();
-    await renderFrame(data.frame); // 复用 render 逻辑（内部会 rollback 到同一帧）
+    await renderFrame(data.frame);
   } else {
     const idx = getCurrentFrameIndex() - 1;
     await renderFrame(idx);
@@ -139,7 +209,14 @@ document.getElementById("btnPrev").addEventListener("click", () => step(-1));
 document.getElementById("btnNext").addEventListener("click", () => step(+1));
 document.getElementById("btnPlayForward").addEventListener("click", async () => {
   playDir = +1;
-  if (!playing) { playing = true; loop(); }
+  if (!playing) {
+    if (AUTO_RECORD_ON_FORWARD_PLAY) {
+      const rec = ensureRecorder();
+      rec?.start();
+    }
+    playing = true;
+    loop();
+  }
 });
 document.getElementById("btnPlayBackward").addEventListener("click", async () => {
   playDir = -1;
@@ -171,7 +248,25 @@ const linkController = new LinkController(viewer, {
     await renderFrame(cur);
   }
 });
-  
+
+// 传感器控件：切换卫星 / 截图 / 显隐
+selSensorSat?.addEventListener("change", async (e) => {
+  sensorSatId = e.target.value;
+  await renderFrame(getCurrentFrameIndex());
+});
+btnSensorSnap?.addEventListener("click", () => {
+  const dataUrl = sensorView.snapshot();
+  const a = document.createElement("a");
+  a.href = dataUrl;
+  a.download = `sensor-view-${Date.now()}.png`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+});
+btnSensorToggle?.addEventListener("click", () => {
+  const isHidden = sensorRootEl.classList.toggle("hidden");
+  sensorView.setEnabled(!isHidden);
+  btnSensorToggle.textContent = isHidden ? "显示" : "隐藏";
+});
+
 // 撤销（按下 'z'）
 window.addEventListener("keydown", async (e) => {
   if (e.key.toLowerCase() === "z") {

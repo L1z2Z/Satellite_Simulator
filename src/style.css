@@ -46,3 +46,50 @@ body { margin: 0; }
   z-index: 10;
   white-space: pre-wrap;
 }
+
+/* === Sensor View (PiP) === */
+#sensorView.sv {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  width: 672px;              /* 16:9 → 420 x 236.25 */
+  height: 378px;             /* 16:9 → 672 x 378 */
+  background: #000;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+}
+#sensorView.hidden { display: none; }
+#sensorView .sv-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  background: rgba(0,0,0,.5);
+  color: #fff;
+  font: 12px/1 system-ui, sans-serif;
+}
+#sensorView .sv-toolbar select,
+#sensorView .sv-toolbar button {
+  border: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.15);
+  color: #fff;
+  cursor: pointer;
+}
+#sensorView .sv-toolbar button:hover,
+#sensorView .sv-toolbar select:hover { background: rgba(255,255,255,.25); }
+#sensorView .sv-toolbar .spacer { flex: 1; }
+#sensorView .sv-canvas {
+  position: relative;
+  flex: 1;
+}
+#sensorCanvas canvas {
+  position: absolute;
+  inset: 0;
+}
+

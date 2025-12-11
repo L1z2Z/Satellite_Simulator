@@ -13,6 +13,12 @@ export default defineConfig({
     // https://vitejs.dev/config/shared-options.html#define
     CESIUM_BASE_URL: JSON.stringify(`/${cesiumBaseUrl}`),
   },
+  // 避免对 Cesium 大量静态资源（纹理等）建立文件监听，防止 ENOSPC: System limit for number of file watchers reached
+  server: {
+    watch: {
+      ignored: ["**/node_modules/cesium/Build/**"],
+    },
+  },
   plugins: [
     // Copy Cesium Assets, Widgets, and Workers to a static directory.
     // If you need to add your own static files to your project, use the `public` directory

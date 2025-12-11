@@ -3,7 +3,7 @@ import { Cartesian3, Math as CesiumMath } from "cesium";
 
 // ==== 可调参数（与前端渲染一致）====
 export const FOV_HALF_ANGLE_DEG = 25;
-export const NUM_FRAMES = 1000;
+export const NUM_FRAMES = 150;
 export const ALT_METERS = 700_000;
 
 // 目标点（经纬度）
