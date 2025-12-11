@@ -80,10 +80,10 @@ let filters = {
   };
   
   function applyFilters(l) {
-    if (filters.showAnnotatedOnly && !l.annotated) return false;
-    if (filters.showVisibleOnly && !l.visible) return false;
-    if (filters.sat !== "ALL" && l.sat !== filters.sat) return false;
-    if (filters.target !== "ALL" && l.target !== filters.target) return false;
+    if (filters.showAnnotatedOnly && !l.annotated) {return false;}
+    if (filters.showVisibleOnly && !l.visible) {return false;}
+    if (filters.sat !== "ALL" && l.sat !== filters.sat) {return false;}
+    if (filters.target !== "ALL" && l.target !== filters.target) {return false;}
     return true;
   }
 
@@ -147,7 +147,7 @@ document.getElementById("btnPlayBackward").addEventListener("click", async () =>
 });
 
 async function loop() {
-  if (!playing) return;
+  if (!playing) {return;}
   await step(playDir);
   setTimeout(loop, 33); // ~30 FPS
 }
@@ -176,7 +176,7 @@ const linkController = new LinkController(viewer, {
 window.addEventListener("keydown", async (e) => {
   if (e.key.toLowerCase() === "z") {
     const ok = undoLast();
-    if (ok) await renderFrame(getCurrentFrameIndex());
+    if (ok) {await renderFrame(getCurrentFrameIndex());}
   }
 });
 

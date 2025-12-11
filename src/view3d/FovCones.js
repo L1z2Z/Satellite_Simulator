@@ -17,7 +17,7 @@ export default class FovCones {
     const dot = Cartesian3.dot(z, dir);
     const eps = 1e-6;
     if (Cartesian3.magnitude(axis) < eps) {
-      if (dot > 0.9999) return Quaternion.IDENTITY;
+      if (dot > 0.9999) {return Quaternion.IDENTITY;}
       const any = new Cartesian3(1, 0, 0);
       return Quaternion.fromAxisAngle(any, Math.PI);
     }

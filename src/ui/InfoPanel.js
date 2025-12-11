@@ -73,7 +73,7 @@ export default class InfoPanel {
       $("#btnImport").onclick = () => $("#fileImport").click();
       $("#fileImport").onchange = async (e) => {
         const file = e.target.files[0];
-        if (!file) return;
+        if (!file) {return;}
         await this.onImport?.(file);
         e.target.value = ""; // 允许重复导入同一文件
       };

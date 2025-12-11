@@ -42,9 +42,11 @@
     "cesium": "^1.114.0"
   },
   "lint-staged": {
-    "*.{js,html}": [
-      "eslint --cache --quiet",
-      "prettier --write --no-config"
+    "*.{js,css}": [
+      "eslint --cache --quiet"
+    ],
+    "*.html": [
+      "prettier --write"
     ]
   }
 }

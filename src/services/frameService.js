@@ -8,19 +8,19 @@ let useMock = true;
 let BASE_URL = "/api";
 
 export function configureBackend({ baseUrl, mock = true } = {}) {
-  if (baseUrl) BASE_URL = baseUrl;
+  if (baseUrl) {BASE_URL = baseUrl;}
   useMock = mock;
 }
 
 export async function getNextFrame() {
   current = (current + 1) % NUM_FRAMES;
-  if (useMock) return mockComputeFrame(current);
+  if (useMock) {return mockComputeFrame(current);}
   // 真后端：await fetch(`${BASE_URL}/next-frame`).then(r => r.json())
 }
 
 export async function rollbackTo(frameIndex) {
   current = ((frameIndex % NUM_FRAMES) + NUM_FRAMES) % NUM_FRAMES;
-  if (useMock) return mockComputeFrame(current);
+  if (useMock) {return mockComputeFrame(current);}
   // 真后端：await fetch(`${BASE_URL}/rollback?frame=${frameIndex}`).then(r => r.json())
 }
 
