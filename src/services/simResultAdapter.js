@@ -2,8 +2,8 @@
 import { Cartesian3, Math as CesiumMath } from "cesium";
 
 // ==== 可调参数（与前端渲染一致）====
-export const FOV_HALF_ANGLE_DEG = 25;
-export const NUM_FRAMES = 150;
+export const FOV_HALF_ANGLE_DEG = 10;
+export const NUM_FRAMES = 1000;
 export const ALT_METERS = 700_000;
 
 // 目标点（经纬度）
@@ -16,8 +16,9 @@ const TARGETS = [
 
 // 卫星（简化轨道：相位、倾角、每帧角速度）
 const SATS = [
-  { id: "SAT-01", phaseDeg:   0, inclinationDeg: 30, degPerFrame: 0.6 },
+  { id: "SAT-01", phaseDeg:   5, inclinationDeg: 40, degPerFrame: 0.6 },
   { id: "SAT-02", phaseDeg: 180, inclinationDeg: 55, degPerFrame: 0.5 },
+  { id: "SAT-03", phaseDeg: 8.0, inclinationDeg: 40, degPerFrame: 0.6 },
 ];
 
 function normalizeLon(lonDeg) {

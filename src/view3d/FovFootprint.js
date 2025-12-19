@@ -1,47 +1,64 @@
 // src/view3d/FovFootprint.js
-import {
-  Color,
-  Ellipsoid,
-  Cartesian3,
-  EllipseGraphics
-} from "cesium";
+import { Color, Ellipsoid, Cartesian3, EllipseGraphics } from "cesium";
 
 export default class FovFootprint {
   constructor(viewer) {
     this.viewer = viewer;
-    this.entity = null;
+    this.entities = new Map(); // satId -> entity
   }
 
-  /** 在地表绘制 FOV 足迹（近似：半径 = 高度 * tan(半顶角)） */
-  update(satPosition, halfAngleDeg) {
-    if (!satPosition) return;
-
-    // 子星点：把卫星位置投影到椭球面
-    const surface = Ellipsoid.WGS84.scaleToGeodeticSurface(satPosition, new Cartesian3(), new Cartesian3());
-    if (!surface) return;
-
-    // 高度与地面半径
-    const R = Ellipsoid.WGS84.maximumRadius; // 粗略足够
-    const r = Cartesian3.magnitude(satPosition);
-    const h = Math.max(0, r - R);
-    const groundRadius = Math.max(10.0, h * Math.tan((halfAngleDeg * Math.PI) / 180));
-
-    if (!this.entity) {
-      this.entity = this.viewer.entities.add({
-        position: surface,
+  _ensure(satId) {
+    if (!this.entities.has(satId)) {
+      const ent = this.viewer.entities.add({
+        id: `FOOT-${satId}`,
+        position: Cartesian3.ZERO,
         ellipse: new EllipseGraphics({
-          semiMajorAxis: groundRadius,
-          semiMinorAxis: groundRadius,
+          semiMajorAxis: 10,
+          semiMinorAxis: 10,
           height: 0,
           material: Color.fromBytes(50, 200, 255, 70),
           outline: true,
-          outlineColor: Color.fromBytes(50, 200, 255, 150)
-        })
+          outlineColor: Color.fromBytes(50, 200, 255, 150),
+        }),
       });
-    } else {
-      this.entity.position = surface;
-      this.entity.ellipse.semiMajorAxis = groundRadius;
-      this.entity.ellipse.semiMinorAxis = groundRadius;
+      this.entities.set(satId, ent);
     }
+    return this.entities.get(satId);
+  }
+
+  /**
+   * @param {Array<{id:string, position:Cartesian3}>} satellites
+   * @param {number} fovHalfAngleDeg
+   * @param {Map<string,{aimPos:Cartesian3,length:number}>} aimMap
+   */
+  updateAll(satellites, fovHalfAngleDeg, aimMap) {
+    satellites.forEach((s) => {
+      const satPos = s.position;
+      const aim = aimMap?.get(s.id);
+
+      // aimPos：优先使用目标点；否则用天底点（子星点）
+      let aimPos = aim?.aimPos;
+      if (!aimPos) {
+        aimPos = Ellipsoid.WGS84.scaleToGeodeticSurface(
+          satPos,
+          new Cartesian3(),
+          new Cartesian3()
+        );
+        if (!aimPos) {return;}
+      }
+
+      // length：优先使用 aim.length；否则用 sat->aim 的距离
+      const length =
+        Number.isFinite(aim?.length) && aim.length > 10
+          ? aim.length
+          : Cartesian3.distance(satPos, aimPos);
+
+      const radius = Math.max(10.0, length * Math.tan((fovHalfAngleDeg * Math.PI) / 180));
+
+      const ent = this._ensure(s.id);
+      ent.position = aimPos;
+      ent.ellipse.semiMajorAxis = radius;
+      ent.ellipse.semiMinorAxis = radius;
+    });
   }
 }

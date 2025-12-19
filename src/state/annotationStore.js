@@ -1,90 +1,85 @@
 // src/state/annotationStore.js
-
-// 储存：frame -> Set("SAT-01|TOKYO")
-const perFrame = new Map();
-// 撤销栈：{ frame, key, prevHad }
+// 全局储存：Set("SAT-01|BEIJING") —— 跨帧持久，除非手动取消
+const globalLinks = new Set();
+// 撤销栈：{ key, prevHad }
 const undoStack = [];
-
-function frameSet(frame) {
-  if (!perFrame.has(frame)) {perFrame.set(frame, new Set());}
-  return perFrame.get(frame);
-}
 
 export function linkKey(satId, targetId) {
   return `${satId}|${targetId}`;
 }
 
-export function hasLink(frame, satId, targetId) {
-  return frameSet(frame).has(linkKey(satId, targetId));
+export function hasLink(satId, targetId) {
+  return globalLinks.has(linkKey(satId, targetId));
 }
 
-export function toggleLink(frame, satId, targetId) {
-  const set = frameSet(frame);
+export function toggleLink(satId, targetId) {
   const key = linkKey(satId, targetId);
-  const prevHad = set.has(key);
-  if (prevHad) {set.delete(key);}
-  else {set.add(key);}
-  undoStack.push({ frame, key, prevHad });
+  const prevHad = globalLinks.has(key);
+  if (prevHad) {globalLinks.delete(key);}
+  else {globalLinks.add(key);}
+  undoStack.push({ key, prevHad });
   return !prevHad;
 }
 
-export function setLink(frame, satId, targetId, value = true) {
-  const set = frameSet(frame);
+export function removeLink(satId, targetId) {
   const key = linkKey(satId, targetId);
-  const prevHad = set.has(key);
-  if (value) {set.add(key);} else {set.delete(key);}
-  undoStack.push({ frame, key, prevHad });
+  const prevHad = globalLinks.has(key);
+  if (prevHad) {globalLinks.delete(key);}
+  undoStack.push({ key, prevHad });
+  return prevHad;
 }
 
-export function getLinksForFrame(frame) {
-  return new Set(frameSet(frame)); // 拷贝
+export function getAllLinks() {
+  return new Set(globalLinks); // 拷贝
 }
 
 export function undoLast() {
   const op = undoStack.pop();
   if (!op) {return false;}
-  const set = frameSet(op.frame);
-  if (op.prevHad) {set.add(op.key);}
-  else {set.delete(op.key);}
+  if (op.prevHad) {globalLinks.add(op.key);}
+  else {globalLinks.delete(op.key);}
   return true;
 }
 
-// ====== 导入 / 导出 ======
-
-/** 导出为 JSON 对象：{ frames: { "0":[["SAT-01","TOKYO"],...], "1":[...] } } */
+// ===== 导入/导出 =====
+// 新格式：{ version:2, mode:"global", links:[[sat,target], ...] }
+// 兼容旧格式：{ version:1, frames:{ "0":[[sat,target],...], ... } } -> 会合并为全局
 export function serializeAll() {
-  const frames = {};
-  for (const [frame, set] of perFrame.entries()) {
-    frames[String(frame)] = Array.from(set).map(k => k.split("|"));
-  }
-  return { version: 1, frames };
+  const links = Array.from(globalLinks).map(k => k.split("|"));
+  return { version: 2, mode: "global", links };
 }
 
-/** 清空全部标注 */
 export function clearAll() {
-  perFrame.clear();
+  globalLinks.clear();
   undoStack.length = 0;
 }
 
-/** 从对象导入。默认合并；merge=false 则先 clear 再导入。 */
 export function loadFromObject(obj, { merge = true } = {}) {
-  if (!obj || typeof obj !== "object" || !obj.frames || typeof obj.frames !== "object") {
-    throw new Error("无效的标注文件：缺少 frames 字段");
-  }
+  if (!obj || typeof obj !== "object") {throw new Error("无效标注文件");}
+
   if (!merge) {clearAll();}
 
-  let total = 0, framesTouched = 0;
-  for (const [frameStr, arr] of Object.entries(obj.frames)) {
-    const frame = Number(frameStr);
-    if (!Number.isFinite(frame)) {continue;}
-    const set = frameSet(frame);
-    framesTouched++;
-    for (const pair of arr || []) {
-      if (!Array.isArray(pair) || pair.length !== 2) {continue;}
-      const [satId, targetId] = pair;
-      set.add(linkKey(String(satId), String(targetId)));
-      total++;
+  // 新格式
+  if (Array.isArray(obj.links)) {
+    for (const pair of obj.links) {
+      if (Array.isArray(pair) && pair.length === 2) {
+        globalLinks.add(linkKey(String(pair[0]), String(pair[1])));
+      }
     }
+    return { total: globalLinks.size };
   }
-  return { framesTouched, total };
+
+  // 旧格式兼容：frames 合并进全局
+  if (obj.frames && typeof obj.frames === "object") {
+    for (const arr of Object.values(obj.frames)) {
+      for (const pair of arr || []) {
+        if (Array.isArray(pair) && pair.length === 2) {
+          globalLinks.add(linkKey(String(pair[0]), String(pair[1])));
+        }
+      }
+    }
+    return { total: globalLinks.size };
+  }
+
+  throw new Error("无效标注文件：缺少 links 或 frames");
 }

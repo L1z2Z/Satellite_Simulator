@@ -39,42 +39,51 @@ export default class SensorView {
   setEnabled(v) {
     this.enabled = !!v;
     const root = this.containerEl.parentElement;
-    if (!root) return;
-    if (this.enabled) root.classList.remove("hidden");
-    else root.classList.add("hidden");
+    if (!root) {return;}
+    if (this.enabled) {root.classList.remove("hidden");}
+    else {root.classList.add("hidden");}
   }
 
-  /** 将相机设置到卫星位置，朝向地心；垂直FOV = 2 * halfAngleDeg；aspectRatio 根据容器计算 */
-  setCameraAtSatellite(satPosition, halfAngleDeg) {
+  // 让相机在卫星位置，朝向给定 aimDir（归一化），垂直FOV = 2*halfAngleDeg
+  setCameraAtSatellite(satPosition, aimDir, halfAngleDeg) {
     const cam = this.viewer.scene.camera;
 
-    // 垂直 FOV
     const fov = CesiumMath.toRadians(2 * halfAngleDeg);
     const rect = this.containerEl.getBoundingClientRect();
     const aspect = Math.max(1e-3, rect.width / Math.max(1, rect.height));
     cam.frustum.fov = fov;
     cam.frustum.aspectRatio = aspect;
 
-    // 近/远裁剪面：依据高度估算
-    const R = Ellipsoid.WGS84.maximumRadius; // ≈ 6378137
+    // 裁剪面（粗略）
+    const R = Ellipsoid.WGS84.maximumRadius;
     const r = Cartesian3.magnitude(satPosition);
     const h = Math.max(10.0, r - R);
     cam.frustum.near = Math.max(10.0, h * 0.02);
     cam.frustum.far = Math.max(cam.frustum.near + 100.0, h * 3.0 + R);
 
-    // 方向：dir = 指向地心；up 取 ENU 的“北”或“上”轴，避免相机翻滚
-    const toCenter = Cartesian3.multiplyByScalar(satPosition, -1, new Cartesian3());
-    const dir = Cartesian3.normalize(toCenter, new Cartesian3());
+    // 方向：中心线方向
+    const dir = Cartesian3.normalize(aimDir, new Cartesian3());
 
+    // 构造一个与 dir 正交且稳定的 up，避免翻滚：
+    // upCandidate = 局部Up；right = dir x upCandidate；up = right x dir
     const enu4 = Transforms.eastNorthUpToFixedFrame(satPosition);
     const enu3 = Matrix4.getMatrix3(enu4, new Matrix3());
-    const up = Matrix3.getColumn(enu3, 2, new Cartesian3()); // 本地 Up（径向外）
+    const upCandidate = Matrix3.getColumn(enu3, 2, new Cartesian3()); // local Up
+
+    let right = Cartesian3.cross(dir, upCandidate, new Cartesian3());
+    if (Cartesian3.magnitude(right) < 1e-6) {
+      // 退化时换一个候选轴
+      right = Cartesian3.cross(dir, new Cartesian3(1, 0, 0), new Cartesian3());
+    }
+    Cartesian3.normalize(right, right);
+    const up = Cartesian3.normalize(Cartesian3.cross(right, dir, new Cartesian3()), new Cartesian3());
 
     cam.setView({
       destination: satPosition,
-      orientation: { direction: dir, up }
+      orientation: { direction: dir, up },
     });
   }
+
 
   /** 导出当前小窗画面为 dataURL（PNG） */
   snapshot() {
