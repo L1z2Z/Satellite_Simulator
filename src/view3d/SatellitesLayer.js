@@ -48,7 +48,9 @@ export default class SatellitesLayer {
     const eps = 1e-6;
     if (Cartesian3.magnitude(axis) < eps) {
       // 同向或反向：反向时绕任意法线 180 度
-      if (dot > 0.9999) {return Quaternion.IDENTITY;}
+      if (dot > 0.9999) {
+        return Quaternion.IDENTITY;
+      }
       const any = new Cartesian3(1, 0, 0);
       return Quaternion.fromAxisAngle(any, Math.PI);
     }
@@ -58,7 +60,7 @@ export default class SatellitesLayer {
   }
 
   updateSatellites(satellites) {
-    satellites.forEach(s => {
+    satellites.forEach((s) => {
       const ent = this._ensureEntity(s);
       ent.position = s.position;
       ent.orientation = SatellitesLayer.orientationToNadir(s.position);

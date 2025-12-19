@@ -15,8 +15,11 @@ export function hasLink(satId, targetId) {
 export function toggleLink(satId, targetId) {
   const key = linkKey(satId, targetId);
   const prevHad = globalLinks.has(key);
-  if (prevHad) {globalLinks.delete(key);}
-  else {globalLinks.add(key);}
+  if (prevHad) {
+    globalLinks.delete(key);
+  } else {
+    globalLinks.add(key);
+  }
   undoStack.push({ key, prevHad });
   return !prevHad;
 }
@@ -24,7 +27,9 @@ export function toggleLink(satId, targetId) {
 export function removeLink(satId, targetId) {
   const key = linkKey(satId, targetId);
   const prevHad = globalLinks.has(key);
-  if (prevHad) {globalLinks.delete(key);}
+  if (prevHad) {
+    globalLinks.delete(key);
+  }
   undoStack.push({ key, prevHad });
   return prevHad;
 }
@@ -35,9 +40,14 @@ export function getAllLinks() {
 
 export function undoLast() {
   const op = undoStack.pop();
-  if (!op) {return false;}
-  if (op.prevHad) {globalLinks.add(op.key);}
-  else {globalLinks.delete(op.key);}
+  if (!op) {
+    return false;
+  }
+  if (op.prevHad) {
+    globalLinks.add(op.key);
+  } else {
+    globalLinks.delete(op.key);
+  }
   return true;
 }
 
@@ -45,7 +55,7 @@ export function undoLast() {
 // 新格式：{ version:2, mode:"global", links:[[sat,target], ...] }
 // 兼容旧格式：{ version:1, frames:{ "0":[[sat,target],...], ... } } -> 会合并为全局
 export function serializeAll() {
-  const links = Array.from(globalLinks).map(k => k.split("|"));
+  const links = Array.from(globalLinks).map((k) => k.split("|"));
   return { version: 2, mode: "global", links };
 }
 
@@ -55,9 +65,13 @@ export function clearAll() {
 }
 
 export function loadFromObject(obj, { merge = true } = {}) {
-  if (!obj || typeof obj !== "object") {throw new Error("无效标注文件");}
+  if (!obj || typeof obj !== "object") {
+    throw new Error("无效标注文件");
+  }
 
-  if (!merge) {clearAll();}
+  if (!merge) {
+    clearAll();
+  }
 
   // 新格式
   if (Array.isArray(obj.links)) {

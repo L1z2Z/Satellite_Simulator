@@ -7,17 +7,17 @@ export default class VisibilityLinks {
     this.pool = [];
   }
   clear() {
-    this.pool.forEach(e => this.viewer.entities.remove(e));
+    this.pool.forEach((e) => this.viewer.entities.remove(e));
     this.pool.length = 0;
   }
   render(links) {
     this.clear();
-    links.forEach(l => {
+    links.forEach((l) => {
       const color = l.annotated
         ? Color.fromCssColorString("#ffd700") // 标注：金色
-        : (l.visible
+        : l.visible
           ? Color.fromCssColorString("#31d158") // 可见：绿
-          : Color.fromCssColorString("#f43f5e")); // 不可见：红
+          : Color.fromCssColorString("#f43f5e"); // 不可见：红
       const ent = this.viewer.entities.add({
         polyline: {
           positions: [l.satPos, l.tgtPos],

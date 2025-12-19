@@ -17,7 +17,9 @@ export default class FovCones {
     const dot = Cartesian3.dot(z, dir);
     const eps = 1e-6;
     if (Cartesian3.magnitude(axis) < eps) {
-      if (dot > 0.9999) {return Quaternion.IDENTITY;}
+      if (dot > 0.9999) {
+        return Quaternion.IDENTITY;
+      }
       const any = new Cartesian3(1, 0, 0);
       return Quaternion.fromAxisAngle(any, Math.PI);
     }
@@ -69,19 +71,25 @@ export default class FovCones {
     Cartesian3.normalize(dirToAim, dirToAim);
 
     // 让“锥尖在卫星上”：局部 +Z 指向卫星（即反向）
-    const axisToSat = Cartesian3.multiplyByScalar(dirToAim, -1, new Cartesian3());
+    const axisToSat = Cartesian3.multiplyByScalar(
+      dirToAim,
+      -1,
+      new Cartesian3(),
+    );
     const orient = FovCones._orientationFromDir(axisToSat);
 
     // 锥体长度：优先用 aim.length，否则用默认长度
     const length =
-      Number.isFinite(aim.length) && aim.length > 10 ? aim.length : this.defaultConeLength;
+      Number.isFinite(aim.length) && aim.length > 10
+        ? aim.length
+        : this.defaultConeLength;
 
     // 锥体中心：从卫星沿 dirToAim 前进 length/2
     const half = length / 2;
     const center = Cartesian3.add(
       satPos,
       Cartesian3.multiplyByScalar(dirToAim, half, new Cartesian3()),
-      new Cartesian3()
+      new Cartesian3(),
     );
 
     // 底半径：length * tan(halfAngle)

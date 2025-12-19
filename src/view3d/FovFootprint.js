@@ -42,9 +42,11 @@ export default class FovFootprint {
         aimPos = Ellipsoid.WGS84.scaleToGeodeticSurface(
           satPos,
           new Cartesian3(),
-          new Cartesian3()
+          new Cartesian3(),
         );
-        if (!aimPos) {return;}
+        if (!aimPos) {
+          return;
+        }
       }
 
       // length：优先使用 aim.length；否则用 sat->aim 的距离
@@ -53,7 +55,10 @@ export default class FovFootprint {
           ? aim.length
           : Cartesian3.distance(satPos, aimPos);
 
-      const radius = Math.max(10.0, length * Math.tan((fovHalfAngleDeg * Math.PI) / 180));
+      const radius = Math.max(
+        10.0,
+        length * Math.tan((fovHalfAngleDeg * Math.PI) / 180),
+      );
 
       const ent = this._ensure(s.id);
       ent.position = aimPos;

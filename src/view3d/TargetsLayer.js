@@ -8,7 +8,7 @@ export default class TargetsLayer {
   }
 
   upsertTargets(targets) {
-    targets.forEach(t => {
+    targets.forEach((t) => {
       if (!this.entities.has(t.id)) {
         const ent = this.viewer.entities.add({
           id: `T-${t.id}`,

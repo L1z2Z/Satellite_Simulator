@@ -6,7 +6,7 @@ import {
   Matrix4,
   Matrix3,
   Cartesian3,
-  Ellipsoid
+  Ellipsoid,
 } from "cesium";
 
 export default class SensorView {
@@ -39,9 +39,14 @@ export default class SensorView {
   setEnabled(v) {
     this.enabled = !!v;
     const root = this.containerEl.parentElement;
-    if (!root) {return;}
-    if (this.enabled) {root.classList.remove("hidden");}
-    else {root.classList.add("hidden");}
+    if (!root) {
+      return;
+    }
+    if (this.enabled) {
+      root.classList.remove("hidden");
+    } else {
+      root.classList.add("hidden");
+    }
   }
 
   // 让相机在卫星位置，朝向给定 aimDir（归一化），垂直FOV = 2*halfAngleDeg
@@ -76,14 +81,16 @@ export default class SensorView {
       right = Cartesian3.cross(dir, new Cartesian3(1, 0, 0), new Cartesian3());
     }
     Cartesian3.normalize(right, right);
-    const up = Cartesian3.normalize(Cartesian3.cross(right, dir, new Cartesian3()), new Cartesian3());
+    const up = Cartesian3.normalize(
+      Cartesian3.cross(right, dir, new Cartesian3()),
+      new Cartesian3(),
+    );
 
     cam.setView({
       destination: satPosition,
       orientation: { direction: dir, up },
     });
   }
-
 
   /** 导出当前小窗画面为 dataURL（PNG） */
   snapshot() {

@@ -2,20 +2,27 @@
 import {
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
-  Cartesian3,
   Color,
+  SceneTransforms,
+  Cartesian2,
 } from "cesium";
+
+const PICK_RADIUS_PX = 10;
 
 // 工具：从实体ID推回领域ID
 function parseDomainId(entityId) {
-  if (entityId.startsWith("T-")) {return { kind: "target", id: entityId.slice(2) };}
+  if (entityId.startsWith("T-")) {
+    return { kind: "target", id: entityId.slice(2) };
+  }
   return { kind: "sat", id: entityId };
 }
 
 function pickGlobePosition(viewer, movement) {
   const { scene, camera } = viewer;
   const ray = camera.getPickRay(movement.endPosition ?? movement.position);
-  if (!ray) {return null;}
+  if (!ray) {
+    return null;
+  }
   return scene.globe.pick(ray, scene);
 }
 
@@ -36,7 +43,10 @@ export default class LinkController {
     this._unlockOnWindowUp = () => {
       if (this.dragging) {
         this.dragging = false;
-        if (this.tempLine) { this.viewer.entities.remove(this.tempLine); this.tempLine = null; }
+        if (this.tempLine) {
+          this.viewer.entities.remove(this.tempLine);
+          this.tempLine = null;
+        }
         this._unlockCamera();
         this.start = null;
       }
@@ -48,7 +58,9 @@ export default class LinkController {
 
   destroy() {
     this.handler?.destroy();
-    if (this.tempLine) {this.viewer.entities.remove(this.tempLine);}
+    if (this.tempLine) {
+      this.viewer.entities.remove(this.tempLine);
+    }
     window.removeEventListener("mouseup", this._unlockOnWindowUp);
     this._unlockCamera(true); // 强制恢复
   }
@@ -62,10 +74,10 @@ export default class LinkController {
         enableTilt: this.ctrl.enableTilt,
         enableLook: this.ctrl.enableLook,
       };
-      this.ctrl.enableRotate = false;    // 关键：禁用左键旋转
+      this.ctrl.enableRotate = false; // 关键：禁用左键旋转
       this.ctrl.enableTranslate = false; // 防止误右键平移（保险）
-      this.ctrl.enableTilt = false;      // 防止中键俯仰（保险）
-      this.ctrl.enableLook = false;      // 防止键盘/组合键 look
+      this.ctrl.enableTilt = false; // 防止中键俯仰（保险）
+      this.ctrl.enableLook = false; // 防止键盘/组合键 look
       // 可选：改变鼠标指针提示正在“抓取”
       this.viewer.container.style.cursor = "grabbing";
     }
@@ -73,7 +85,9 @@ export default class LinkController {
 
   // 解锁相机（恢复原状态）
   _unlockCamera(force = false) {
-    if (force) {this._camLockCount = 1;}
+    if (force) {
+      this._camLockCount = 1;
+    }
     if (--this._camLockCount <= 0) {
       this._camLockCount = 0;
       if (this._prevCam) {
@@ -109,20 +123,36 @@ export default class LinkController {
 
     for (let i = 0; i < ents.length; i++) {
       const ent = ents[i];
-      if (!ent || !ent.id) {continue;}
+      if (!ent || !ent.id) {
+        continue;
+      }
 
       const d = parseDomainId(ent.id);
-      if (!d) {continue;} // 非交互对象（如 FOV-*、polyline 等）跳过
-      if (requiredKind && d.kind !== requiredKind) {continue;}
+      if (!d) {
+        continue;
+      } // 非交互对象（如 FOV-*、polyline 等）跳过
+      if (requiredKind && d.kind !== requiredKind) {
+        continue;
+      }
 
       // 需要实体具备 position
       const posProp = ent.position;
-      if (!posProp) {continue;}
+      if (!posProp) {
+        continue;
+      }
       const p3 = posProp.getValue ? posProp.getValue(time) : posProp;
-      if (!p3) {continue;}
+      if (!p3) {
+        continue;
+      }
 
-      const win = SceneTransforms.wgs84ToWindowCoordinates(scene, p3, new Cartesian2());
-      if (!win) {continue;}
+      const win = SceneTransforms.wgs84ToWindowCoordinates(
+        scene,
+        p3,
+        new Cartesian2(),
+      );
+      if (!win) {
+        continue;
+      }
 
       const dx = win.x - windowPos.x;
       const dy = win.y - windowPos.y;
@@ -143,10 +173,14 @@ export default class LinkController {
     // 鼠标按下：确定起点，并“锁相机”
     this.handler.setInputAction((movement) => {
       const picked = scene.pick(movement.position);
-      if (!picked || !picked.id) {return;}
+      if (!picked || !picked.id) {
+        return;
+      }
       const ent = picked.id;
       const domain = parseDomainId(ent.id);
-      if (!domain) {return;}
+      if (!domain) {
+        return;
+      }
 
       this.dragging = true;
       this.start = { ...domain, entity: ent };
@@ -154,7 +188,8 @@ export default class LinkController {
       // 开始拖拽时锁相机（停止左键旋转）
       this._lockCamera();
 
-      const from = ent.position.getValue?.(scene?.frameState?.time) || ent.position;
+      const from =
+        ent.position.getValue?.(scene?.frameState?.time) || ent.position;
       this.tempLine = this.viewer.entities.add({
         polyline: {
           positions: [from, from],
@@ -166,19 +201,28 @@ export default class LinkController {
 
     // 鼠标移动：更新临时线终点
     this.handler.setInputAction((movement) => {
-      if (!this.dragging || !this.tempLine) {return;}
-      const from = this.start.entity.position.getValue?.(scene?.frameState?.time) || this.start.entity.position;
+      if (!this.dragging || !this.tempLine) {
+        return;
+      }
+      const from =
+        this.start.entity.position.getValue?.(scene?.frameState?.time) ||
+        this.start.entity.position;
       const to = pickGlobePosition(this.viewer, movement) || from;
       this.tempLine.polyline.positions = [from, to];
     }, ScreenSpaceEventType.MOUSE_MOVE);
 
     // 鼠标松开：尝试建立/删除标注，并“解锁相机”
     this.handler.setInputAction((movement) => {
-      if (!this.dragging) {return;}
+      if (!this.dragging) {
+        return;
+      }
       const picked = scene.pick(movement.position);
       const shift = movement.shiftKey === true || movement?.shiftKey === 1;
 
-      if (this.tempLine) { this.viewer.entities.remove(this.tempLine); this.tempLine = null; }
+      if (this.tempLine) {
+        this.viewer.entities.remove(this.tempLine);
+        this.tempLine = null;
+      }
 
       // ★ 关键：结束拖拽时解锁相机（恢复原行为）
       this._unlockCamera();
