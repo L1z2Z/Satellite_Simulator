@@ -19,13 +19,16 @@ import {
   rollbackTo,
   configureBackend,
   getCurrentFrameIndex,
+  getTotalFrames,
+  exportScenarioObject,
+  loadScenarioFromObject,
+  peekSatellitePosition,
 } from "./services/frameService";
 import TargetsLayer from "./view3d/TargetsLayer";
 import SatellitesLayer from "./view3d/SatellitesLayer";
 import FovCones from "./view3d/FovCones";
 import VisibilityLinks from "./view3d/VisibilityLinks";
 import OrbitsLayer from "./view3d/OrbitsLayer";
-import { mockComputeFrame, NUM_FRAMES } from "./services/simResultAdapter";
 import SensorView from "./ui/SensorView";
 //import FovFootprint from "./view3d/FovFootprint";
 import LinkController from "./inteactions/linkController";
@@ -53,18 +56,84 @@ const viewer = new Viewer("cesiumContainer", {
   terrain: Terrain.fromWorldTerrain(), // 若你没有 token 可注释掉
 });
 
-// 加载 Cesium ion 上的 3D 建筑（例如资产 ID 96188）
-async function addBuildingsFromIon() {
+// // 加载 Cesium ion 上的 3D 建筑（例如资产 ID 96188）
+// async function addBuildingsFromIon() {
+//   try {
+//     const tileset = await Cesium3DTileset.fromIonAssetId(96188);
+//     viewer.scene.primitives.add(tileset);
+//   } catch (e) {
+//     // 在控制台查看具体错误信息（权限、网络等）
+//     console.error("加载 3D 建筑 tileset 失败", e);
+//   }
+// }
+
+// addBuildingsFromIon();
+
+// ===== Google Photorealistic 3D Tiles（带贴图的 3D 地面/建筑底图）=====
+async function addGooglePhotorealisticTiles() {
+  const key = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+
+  // 先打印一下，方便你确认 env 是否生效（长度不为 0 即可）
+  console.log("[Google 3D Tiles] key length =", key ? key.length : 0);
+
+  if (!key) {
+    console.warn(
+      "[Google 3D Tiles] 未检测到 VITE_GOOGLE_MAPS_API_KEY。注意：修改 .env.local 后必须重启 npm run dev。"
+    );
+    return null;
+  }
+
+  const url = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${key}`;
+
   try {
-    const tileset = await Cesium3DTileset.fromIonAssetId(96188);
+    // 先确保 globe 还是显示的（避免 tileset 未 ready 时 화면一片空）
+    viewer.scene.globe.show = true;
+
+    const tileset = await Cesium3DTileset.fromUrl(url, {
+      maximumScreenSpaceError: 8, // 越小越清晰，性能开销越大
+      skipLevelOfDetail: true,
+      preferLeaves: true,
+    });
+
     viewer.scene.primitives.add(tileset);
+
+    // 等 tileset 真正 ready（否则 flyTo/隐藏 globe 时机不对）
+    await tileset.readyPromise;
+
+    // tileset ready 之后，再隐藏 globe（避免 globe 与 photorealistic 网格穿插）
+    viewer.scene.globe.show = false;
+
+    // 建议关掉大气/雾（可选），让 photorealistic 更“干净”
+    viewer.scene.skyAtmosphere.show = false;
+    viewer.scene.fog.enabled = false;
+
+    // 飞到一个确定有覆盖、且高度合适的位置：东京站附近（你可改）
+    await viewer.camera.flyTo({
+      destination: Cartesian3.fromDegrees(139.7671, 35.6812, 1500),
+      orientation: {
+        heading: CesiumMath.toRadians(0),
+        pitch: CesiumMath.toRadians(-35),
+        roll: 0,
+      },
+      duration: 1.2,
+    });
+
+    console.log("[Google 3D Tiles] Loaded & camera moved.");
+    return tileset;
   } catch (e) {
-    // 在控制台查看具体错误信息（权限、网络等）
-    console.error("加载 3D 建筑 tileset 失败", e);
+    console.error("[Google 3D Tiles] 加载失败：", e);
+
+    // 失败时：确保 globe 还显示，并且飞回 home，避免“什么都没有”的观感
+    viewer.scene.globe.show = true;
+    viewer.camera.flyHome(1.2);
+
+    return null;
   }
 }
 
-addBuildingsFromIon();
+// 调用：注意这行不要再注释 flyHome 了，我们在失败时会自动 flyHome
+addGooglePhotorealisticTiles();
+
 
 // ========== 2) 组装 3D 图层 ==========
 const targetsLayer = new TargetsLayer(viewer);
@@ -114,15 +183,39 @@ function applyFilters(l) {
 
 const infoPanel = new InfoPanel(infoPanelEl, {
   onExport: () => {
-    const obj = serializeAll();
+    // 导出：场景（全卫星全帧轨道）+ 标注（可选）
+    const scenario = exportScenarioObject();
+    const annotations = serializeAll();
+    const obj = { ...scenario };
+    if (Array.isArray(annotations?.links) && annotations.links.length > 0) {
+      obj.annotations = annotations;
+    }
     const ts = new Date();
     const pad = (n) => String(n).padStart(2, "0");
-    const fname = `annotations-${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}.json`;
+    const fname = `scenario-${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}.json`;
     downloadJSON(obj, fname);
   },
   onImport: async (file) => {
     const obj = await readJSONFile(file);
-    loadFromObject(obj, { merge: true }); // 合并导入
+    // 兼容两类文件：
+    // 1) 新场景文件：{type:"sim_scenario", version:1, satellites:[...], targets:[...], ...}
+    // 2) 旧标注文件：{version:2, links:[...]} 或 {version:1, frames:{...}}
+    if (obj && typeof obj === "object" && obj.type === "sim_scenario") {
+      loadScenarioFromObject(obj);
+
+      // 若场景文件内带标注，则一并导入；否则保持现有标注不变
+      if (obj.annotations) {
+        loadFromObject(obj.annotations, { merge: true });
+      }
+
+      // 重新生成轨道显示
+      orbitsInitialized = false;
+      await renderFrame(0);
+      return;
+    }
+
+    // 旧格式：仅标注
+    loadFromObject(obj, { merge: true });
     await renderFrame(getCurrentFrameIndex());
   },
   onFilterChange: async (f) => {
@@ -175,20 +268,18 @@ async function renderFrame(frameIndex) {
   const data = await rollbackTo(frameIndex);
 
   // ===== 初始化虚线轨道（只执行一次）=====
-  if (!orbitsInitialized && typeof mockComputeFrame === "function") {
+  if (!orbitsInitialized) {
     const satIds = data.satellites.map((s) => s.id);
 
     // 采样点数：尽量接近 360 个点（看起来平滑）
-    const step = Math.max(1, Math.floor(NUM_FRAMES / 360));
+    const totalFrames = getTotalFrames();
+    const step = Math.max(1, Math.floor(totalFrames / 360));
 
     for (const satId of satIds) {
       const positions = [];
-      for (let f = 0; f < NUM_FRAMES; f += step) {
-        const fr = mockComputeFrame(f);
-        const sat = fr.satellites.find((ss) => ss.id === satId);
-        if (sat) {
-          positions.push(sat.position);
-        }
+      for (let f = 0; f < totalFrames; f += step) {
+        const p = peekSatellitePosition(satId, f);
+        if (p) {positions.push(p);}
       }
       // 闭合（可选）：让首尾连上
       if (positions.length > 1) {
@@ -336,7 +427,7 @@ async function renderFrame(frameIndex) {
   }
 
   // ===== 6) 面板/统计 =====
-  frameInfoEl.textContent = `Frame ${data.frame} / ${NUM_FRAMES - 1}`;
+  frameInfoEl.textContent = `Frame ${data.frame} / ${getTotalFrames() - 1}`;
 
   const visibleCount = linksWithAnno.reduce(
     (s, l) => s + (l.visible ? 1 : 0),
@@ -368,7 +459,7 @@ async function step(dir = +1) {
   if (dir > 0) {
     const cur = getCurrentFrameIndex();
     // 若已在最后一帧，则自动停止并保存视频，不再回绕到 0
-    if (cur >= NUM_FRAMES - 1) {
+    if (cur >= getTotalFrames() - 1) {
       playing = false;
       await finalizeRecordingAndDownload();
       return;
@@ -467,4 +558,4 @@ window.addEventListener("keydown", async (e) => {
 
 // 初始
 renderFrame(0);
-viewer.camera.flyHome(1.2);
+//viewer.camera.flyHome(1.2);
